@@ -10,5 +10,5 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 ropey = "1.6"
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 tree-house = { version = "0.3.0", default-features = false }
