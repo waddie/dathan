@@ -1,0 +1,14 @@
+[package]
+name = "dathan"
+version = "0.1.0"
+edition = "2021"
+description = "Highlight source code to HTML or Clojure/EDN Hiccup using Helix's tree-sitter grammars"
+
+[dependencies]
+tree-house = { version = "0.3.0", default-features = false }
+ropey = "1.6"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+regex = "1"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
