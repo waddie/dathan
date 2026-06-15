@@ -1,6 +1,6 @@
 [package]
 name = "dathan"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Highlight source code to HTML or Clojure/EDN Hiccup using Helix's tree-sitter grammars"
 

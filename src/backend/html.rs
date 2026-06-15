@@ -12,7 +12,7 @@ pub struct HtmlBackend {
 
 impl HtmlBackend {
     pub fn new() -> Self {
-        let mut out = String::from("<pre><code class=\"dathan\">");
+        let mut out = String::from("<div class=\"dathan\"><pre><code>");
         out.reserve(4096);
         Self { out }
     }
@@ -35,7 +35,7 @@ impl Backend for HtmlBackend {
 
     fn finish(self: Box<Self>) -> String {
         let mut out = self.out;
-        out.push_str("</code></pre>\n");
+        out.push_str("</code></pre></div>\n");
         out
     }
 }
@@ -65,9 +65,9 @@ mod tests {
         let out = b.finish();
         assert_eq!(
             out,
-            "<pre><code class=\"dathan\">\
+            "<div class=\"dathan\"><pre><code>\
              <span class=\"keyword keyword-control\">if x &lt; 1 &amp;&amp; &quot;q&quot;</span>\
-             </code></pre>\n"
+             </code></pre></div>\n"
         );
     }
 }

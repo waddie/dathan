@@ -71,17 +71,19 @@ hierarchical classes, so `keyword.control.conditional` is rendered as
 HTML:
 
 ```html
-<pre><code class="dathan"><span class="keyword keyword-function">fn</span> ...</code></pre>
+<div class="dathan">
+  <pre><code><span class="keyword keyword-function">fn</span> …</code></pre>
+</div>
 ```
 
 EDN Hiccup:
 
 ```clojure
-[:pre [:code [:span {:class "keyword keyword-function"} "fn"] " " ...]]
+[:div.dathan [:pre [:code [:span {:class "keyword keyword-function"} "fn"] " " …]]]
 ```
 
 CSS from `--emit-css` targets the most specific class, for example
-`.keyword-control { color: ...; }`. Palette names in the theme are resolved.
+`.keyword-control { color: …; }`. Palette names in the theme are resolved.
 
 ## Tests
 

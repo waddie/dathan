@@ -55,12 +55,12 @@ impl Backend for EdnHiccupBackend {
 
     fn finish(self: Box<Self>) -> String {
         let root = &self.stack[0];
-        let mut out = String::from("[:pre [:code");
+        let mut out = String::from("[:div.dathan [:pre [:code");
         for child in &root.children {
             out.push(' ');
             out.push_str(child);
         }
-        out.push_str("]]\n");
+        out.push_str("]]]\n");
         out
     }
 }
@@ -108,7 +108,7 @@ mod tests {
         let out = b.finish();
         assert_eq!(
             out,
-            "[:pre [:code [:span {:class \"keyword keyword-function\"} \"fn\"] \"\\t\\\"x\\\"\\n\"]]\n"
+            "[:div.dathan [:pre [:code [:span {:class \"keyword keyword-function\"} \"fn\"] \"\\t\\\"x\\\"\\n\"]]]\n"
         );
     }
 }
