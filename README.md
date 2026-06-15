@@ -20,8 +20,11 @@ The binary is `target/release/dathan`.
 ## Usage
 
 ```
-dathan [OPTIONS] <FILE>
+dathan [OPTIONS] [FILE]
 ```
+
+If `FILE` is omitted, source is read from stdin. With stdin there is no filename
+to detect from, so pass `--lang` (or rely on a `#!` shebang line).
 
 Options:
 
@@ -40,6 +43,7 @@ Examples:
 ```
 dathan src/main.rs
 dathan --format html src/main.rs -o main.html
+cat src/main.rs | dathan --lang rust
 dathan --emit-css --theme ~/source/helix/theme.toml -o theme.css
 ```
 

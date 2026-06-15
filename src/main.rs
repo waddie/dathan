@@ -9,6 +9,7 @@ mod queries;
 mod runtime;
 mod theme;
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -30,7 +31,7 @@ enum Format {
     about = "Highlight code to HTML or Clojure/EDN Hiccup via Helix grammars"
 )]
 struct Cli {
-    /// Source file to highlight (omit only with --emit-css).
+    /// Source file to highlight (reads from stdin if omitted).
     file: Option<PathBuf>,
 
     /// Output format.
@@ -74,21 +75,29 @@ fn main() -> Result<()> {
         return write_output(cli.output.as_deref(), &css);
     }
 
-    let file = cli
-        .file
-        .as_deref()
-        .ok_or_else(|| anyhow!("a FILE argument is required (or use --emit-css)"))?;
-    let source =
-        std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
+    let file = cli.file.as_deref();
+    let source = match file {
+        Some(path) => {
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
+        }
+        None => {
+            let mut buf = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buf)
+                .context("reading from stdin")?;
+            buf
+        }
+    };
 
     let merged = load_languages(&cli)?;
     let loader = Loader::new(rt, merged)?;
 
-    let lang = detect_language(&loader, &cli, file, &source).ok_or_else(|| {
-        anyhow!(
+    let lang = detect_language(&loader, &cli, file, &source).ok_or_else(|| match file {
+        Some(path) => anyhow!(
             "could not determine language for {} (try --lang)",
-            file.display()
-        )
+            path.display()
+        ),
+        None => anyhow!("could not determine language for stdin (try --lang)"),
     })?;
 
     let mut backend: Box<dyn Backend> = match cli.format {
@@ -104,16 +113,17 @@ fn main() -> Result<()> {
 fn detect_language(
     loader: &Loader,
     cli: &Cli,
-    file: &Path,
+    file: Option<&Path>,
     source: &str,
 ) -> Option<tree_house::Language> {
     if let Some(name) = &cli.lang {
         return loader.language_for_name(name);
     }
-    loader.language_for_filename(file).or_else(|| {
-        let first_line = source.lines().next().unwrap_or_default();
-        loader.language_for_shebang(first_line)
-    })
+    file.and_then(|f| loader.language_for_filename(f))
+        .or_else(|| {
+            let first_line = source.lines().next().unwrap_or_default();
+            loader.language_for_shebang(first_line)
+        })
 }
 
 /// Load the base `languages.toml` and merge the user config over it (by
