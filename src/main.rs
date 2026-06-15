@@ -69,9 +69,8 @@ fn main() -> Result<()> {
 
     if cli.emit_css {
         let theme_path = resolve_theme(&cli, &rt)?;
-        let theme_toml = std::fs::read_to_string(&theme_path)
-            .with_context(|| format!("reading theme {}", theme_path.display()))?;
-        let css = theme::to_css(&theme_toml)?;
+        let theme_dirs = theme_dirs(&theme_path, &rt);
+        let css = theme::load_css(&theme_path, &theme_dirs)?;
         return write_output(cli.output.as_deref(), &css);
     }
 
@@ -167,6 +166,25 @@ fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {
         candidates.push(root.parent().map(|p| p.join("theme.toml")));
     }
     first_existing(candidates).ok_or_else(|| anyhow!("no theme.toml found; pass --theme <path>"))
+}
+
+/// Directories to search for parent themes referenced via `inherits`, in
+/// priority order: the selected theme's own directory, then each runtime root's
+/// `themes/` subdir, then the user config themes dir (mirroring Helix).
+fn theme_dirs(theme_path: &Path, rt: &Runtime) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(parent) = theme_path.parent() {
+        dirs.push(parent.to_path_buf());
+    }
+    for root in rt.roots() {
+        dirs.push(root.join("themes"));
+    }
+    if let Some(home) = home_dir() {
+        dirs.push(home.join(".config/helix/themes"));
+    }
+    dirs.retain(|p| p.is_dir());
+    dirs.dedup();
+    dirs
 }
 
 fn first_existing<I>(candidates: I) -> Option<PathBuf>
