@@ -60,7 +60,8 @@ struct Cli {
     #[arg(long)]
     languages: Option<PathBuf>,
 
-    /// theme.toml to use for --emit-css.
+    /// Theme to use: a path to a theme.toml, or a bare name (e.g. `acid`)
+    /// resolved against the runtime `themes/` dirs.
     #[arg(long)]
     theme: Option<PathBuf>,
 
@@ -202,8 +203,19 @@ fn load_theme(cli: &Cli, rt: &Runtime) -> Result<Theme> {
 }
 
 fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {
-    if let Some(path) = &cli.theme {
-        return Ok(path.clone());
+    if let Some(theme) = &cli.theme {
+        // An explicit path that exists on disk wins.
+        if theme.exists() {
+            return Ok(theme.clone());
+        }
+        // Otherwise treat it as a bare name and look up `<name>.toml` in the
+        // runtime `themes/` dirs, mirroring Helix (e.g. `--theme acid`).
+        let filename = format!("{}.toml", theme.display());
+        let candidates = runtime_theme_dirs(rt)
+            .into_iter()
+            .map(|dir| Some(dir.join(&filename)));
+        return first_existing(candidates)
+            .ok_or_else(|| anyhow!("theme not found by path or name: {}", theme.display()));
     }
     let mut candidates = vec![home_dir().map(|h| h.join("source/helix/theme.toml"))];
     // A theme bundled alongside any runtime root's parent.
@@ -211,6 +223,19 @@ fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {
         candidates.push(root.parent().map(|p| p.join("theme.toml")));
     }
     first_existing(candidates).ok_or_else(|| anyhow!("no theme.toml found; pass --theme <path>"))
+}
+
+/// The `themes/` dirs to search for a theme by name, in priority order: each
+/// runtime root's `themes/` subdir, then the user config themes dir.
+fn runtime_theme_dirs(rt: &Runtime) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for root in rt.roots() {
+        dirs.push(root.join("themes"));
+    }
+    if let Some(home) = home_dir() {
+        dirs.push(home.join(".config/helix/themes"));
+    }
+    dirs
 }
 
 /// Directories to search for parent themes referenced via `inherits`, in
@@ -221,12 +246,7 @@ fn theme_dirs(theme_path: &Path, rt: &Runtime) -> Vec<PathBuf> {
     if let Some(parent) = theme_path.parent() {
         dirs.push(parent.to_path_buf());
     }
-    for root in rt.roots() {
-        dirs.push(root.join("themes"));
-    }
-    if let Some(home) = home_dir() {
-        dirs.push(home.join(".config/helix/themes"));
-    }
+    dirs.extend(runtime_theme_dirs(rt));
     dirs.retain(|p| p.is_dir());
     dirs.dedup();
     dirs

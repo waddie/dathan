@@ -40,7 +40,7 @@ Options:
 --lang <name>                Force a language instead of detecting it.
 --runtime <path>             Extra runtime root, highest priority. Repeatable.
 --languages <path>           Base languages.toml. The user config is still merged on top.
---theme <path>               theme.toml for --emit-css and the theme-aware output.
+--theme <path|name>          theme.toml path, or a bare name resolved against the runtime themes/ dirs.
 --emit-css                   Write a CSS stylesheet from the theme and exit. Ignores FILE.
 -o, --output <path>          Output file. Default: stdout.
 ```
@@ -65,6 +65,11 @@ theme and puts a base `ui.text` / `ui.background` style on the container.
 theme directly. They use `--theme` if given, otherwise the same theme discovery
 as `--emit-css`, and fall back to the bundled `default` theme when none is found.
 
+`--theme` takes either a path to a `theme.toml` or a bare name. A name that
+isn’t an existing path is resolved to `<name>.toml` in the runtime `themes/`
+dirs (each runtime root’s `themes/`, then `~/.config/helix/themes`), so
+`--theme acid` picks up `acid.toml` from the runtime.
+
 A scope’s style is resolved by longest dotted prefix (e.g. `function.builtin`
 falls back to `function`), matching Helix.
 
@@ -76,6 +81,7 @@ dathan --format html src/main.rs -o main.html
 cat src/main.rs | dathan --lang rust
 dathan --emit-css --theme ~/source/helix/theme.toml -o theme.css
 dathan --format terminal --theme ~/source/helix/theme.toml src/main.rs
+dathan --theme acid src/main.rs
 dathan --format html --inline src/main.rs -o main.html
 ```
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.0 (2026-06-17)
+
+### Added
+
+- `--theme` now accepts a bare theme name (e.g. `--theme acid`) resolved against
+  the runtime `themes/` dirs, in addition to a path to a `theme.toml`
+
 ## v0.5.0 (2026-06-17)
 
 ### Added
