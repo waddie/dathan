@@ -1,9 +1,9 @@
 # dathan
 
-Highlight source code to highlighted HTML, Hiccup or ANSI, using Helix’s tree-sitter
-grammars and queries.
+Highlight source code to HTML, Hiccup or ANSI, using
+[Helix](https://helix-editor.com/)’s tree-sitter grammars and queries.
 
-`dathan` reads the precompiled grammars and `highlights.scm` / `injections.scm` /
+`dathan` reads the compiled grammars and `highlights.scm` / `injections.scm` /
 `locals.scm` queries from a Helix runtime, so it covers whatever languages that
 runtime provides. Grammar loading, query `inherits` resolution, injections, and
 locals are handled by [tree-house](https://github.com/helix-editor/tree-house),
