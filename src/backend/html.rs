@@ -4,7 +4,7 @@
 //! target any level: `keyword.control.conditional` becomes
 //! `class="keyword keyword-control keyword-control-conditional"`.
 
-use super::{classes, Backend};
+use super::{Backend, classes, escape_html_into};
 
 pub struct HtmlBackend {
     out: String,
@@ -26,7 +26,7 @@ impl Backend for HtmlBackend {
     }
 
     fn text(&mut self, text: &str) {
-        escape_into(text, &mut self.out);
+        escape_html_into(text, &mut self.out);
     }
 
     fn close(&mut self) {
@@ -37,18 +37,6 @@ impl Backend for HtmlBackend {
         let mut out = self.out;
         out.push_str("</code></pre></div>\n");
         out
-    }
-}
-
-fn escape_into(text: &str, out: &mut String) {
-    for ch in text.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(ch),
-        }
     }
 }
 

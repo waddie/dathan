@@ -2,9 +2,15 @@
 
 mod hiccup;
 mod html;
+mod html_inline;
+mod json_hiccup;
+mod terminal;
 
 pub use hiccup::EdnHiccupBackend;
 pub use html::HtmlBackend;
+pub use html_inline::HtmlInlineBackend;
+pub use json_hiccup::JsonHiccupBackend;
+pub use terminal::TerminalBackend;
 
 /// A streaming sink for highlight events. `open`/`close` bracket a highlighted
 /// span (spans nest); `text` receives a raw source slice the backend must
@@ -31,6 +37,21 @@ pub(crate) fn classes(scope: &str) -> String {
         classes.push(parts[..i].join("-"));
     }
     classes.join(" ")
+}
+
+/// Append `text` to `out`, escaping the characters that are unsafe in HTML text
+/// and double-quoted attribute values. Shared by the class- and inline-style
+/// HTML backends.
+pub(crate) fn escape_html_into(text: &str, out: &mut String) {
+    for ch in text.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(ch),
+        }
+    }
 }
 
 #[cfg(test)]

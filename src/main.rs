@@ -1,5 +1,5 @@
-//! dathan — highlight source code to HTML or Clojure/EDN Hiccup using Helix's
-//! tree-sitter grammars and queries.
+//! dathan — highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal
+//! output using Helix's tree-sitter grammars and queries.
 
 mod backend;
 mod grammar;
@@ -7,35 +7,44 @@ mod highlight;
 mod languages;
 mod queries;
 mod runtime;
+mod style;
 mod theme;
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueEnum};
 
-use backend::{Backend, EdnHiccupBackend, HtmlBackend};
+use backend::{
+    Backend, EdnHiccupBackend, HtmlBackend, HtmlInlineBackend, JsonHiccupBackend, TerminalBackend,
+};
 use languages::Loader;
-use runtime::{home_dir, Runtime};
+use runtime::{Runtime, home_dir};
+use theme::Theme;
 
 #[derive(Clone, Copy, ValueEnum)]
 enum Format {
     Html,
     EdnHiccup,
+    JsonHiccup,
+    /// ANSI terminal escape codes (theme-aware).
+    Terminal,
+    /// HTML with inline `style` attributes (theme-aware).
+    HtmlInline,
 }
 
 #[derive(Parser)]
 #[command(
     name = "dathan",
-    about = "Highlight code to HTML or Clojure/EDN Hiccup via Helix grammars"
+    about = "Highlight code to HTML, Hiccup (EDN/JSON), or ANSI terminal output via Helix grammars"
 )]
 struct Cli {
     /// Source file to highlight (reads from stdin if omitted).
     file: Option<PathBuf>,
 
     /// Output format.
-    #[arg(long, value_enum, default_value = "edn-hiccup")]
+    #[arg(long, value_enum, default_value = "terminal")]
     format: Format,
 
     /// Override detected language by name (e.g. `rust`).
@@ -89,6 +98,17 @@ fn main() -> Result<()> {
     };
 
     let merged = load_languages(&cli)?;
+
+    // Build the backend before the loader consumes `rt`; the theme-aware
+    // backends need the runtime to locate themes.
+    let mut backend: Box<dyn Backend> = match cli.format {
+        Format::Html => Box::new(HtmlBackend::new()),
+        Format::EdnHiccup => Box::new(EdnHiccupBackend::new()),
+        Format::JsonHiccup => Box::new(JsonHiccupBackend::new()),
+        Format::Terminal => Box::new(TerminalBackend::new(load_theme(&cli, &rt)?)),
+        Format::HtmlInline => Box::new(HtmlInlineBackend::new(load_theme(&cli, &rt)?)),
+    };
+
     let loader = Loader::new(rt, merged)?;
 
     let lang = detect_language(&loader, &cli, file, &source).ok_or_else(|| match file {
@@ -99,10 +119,6 @@ fn main() -> Result<()> {
         None => anyhow!("could not determine language for stdin (try --lang)"),
     })?;
 
-    let mut backend: Box<dyn Backend> = match cli.format {
-        Format::Html => Box::new(HtmlBackend::new()),
-        Format::EdnHiccup => Box::new(EdnHiccupBackend::new()),
-    };
     highlight::highlight(&loader, lang, &source, backend.as_mut())?;
     let rendered = backend.finish();
 
@@ -154,6 +170,19 @@ fn load_languages(cli: &Cli) -> Result<toml::Value> {
     };
 
     languages::merge_configs(&base, overlay.as_deref())
+}
+
+/// Load the theme for a theme-aware backend, falling back to the bundled
+/// `default` theme when none is configured. An explicitly requested theme that
+/// cannot be read is an error.
+fn load_theme(cli: &Cli, rt: &Runtime) -> Result<Theme> {
+    match resolve_theme(cli, rt) {
+        Ok(path) => {
+            let dirs = theme_dirs(&path, rt);
+            Theme::load(&path, &dirs)
+        }
+        Err(_) => Ok(Theme::bundled_default()),
+    }
 }
 
 fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {

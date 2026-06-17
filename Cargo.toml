@@ -1,8 +1,8 @@
 [package]
 name = "dathan"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
-description = "Highlight source code to HTML or Clojure/EDN Hiccup using Helix's tree-sitter grammars"
+description = "Highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal output using Helix's tree-sitter grammars"
 
 [dependencies]
 anyhow = "1"
