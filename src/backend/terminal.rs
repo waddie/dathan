@@ -67,13 +67,34 @@ impl Backend for TerminalBackend {
         // to end-of-line before every newline.
         let mut rest = text;
         while let Some(idx) = rest.find('\n') {
-            self.out.push_str(&rest[..idx]);
+            let mut line = &rest[..idx];
+            // For CRLF sources, the erase must precede the carriage return:
+            // emitting `\x1b[K` after a `\r` would erase from column 0 and wipe
+            // the line we just wrote, leaving only the background.
+            let cr = line.ends_with('\r');
+            if cr {
+                line = &line[..line.len() - 1];
+            }
+            self.out.push_str(line);
             self.out.push_str(CLEAR_EOL);
+            if cr {
+                self.out.push('\r');
+            }
             self.out.push('\n');
             rest = &rest[idx + 1..];
         }
-        self.out.push_str(rest);
-        self.line_dirty = !rest.is_empty();
+        // A trailing `\r` with no following `\n` (e.g. a CR-only line ending, or
+        // a CRLF split across spans) must not sit before the final CLEAR_EOL
+        // either; strip it so `finish` fills the tail correctly.
+        if let Some(stripped) = rest.strip_suffix('\r') {
+            self.out.push_str(stripped);
+            self.out.push_str(CLEAR_EOL);
+            self.out.push('\r');
+            self.line_dirty = false;
+        } else {
+            self.out.push_str(rest);
+            self.line_dirty = !rest.is_empty();
+        }
     }
 
     fn close(&mut self) {
@@ -160,6 +181,20 @@ keyword = { fg = "#ff0000", modifiers = ["bold"] }
         assert_eq!(
             out,
             "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\nb\x1b[K\x1b[0m\n"
+        );
+    }
+
+    #[test]
+    fn crlf_erases_before_the_carriage_return() {
+        let mut b = Box::new(TerminalBackend::new(theme()));
+        b.text("a\r\nb");
+        let out = b.finish();
+        // The erase-to-end-of-line must precede the `\r`; emitting it after the
+        // carriage return would wipe the line at display time, leaving only the
+        // background.
+        assert_eq!(
+            out,
+            "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\r\nb\x1b[K\x1b[0m\n"
         );
     }
 
