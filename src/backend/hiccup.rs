@@ -1,29 +1,33 @@
 //! Clojure/EDN Hiccup backend.
 //!
 //! Emits `[:pre [:code [:span {:class "keyword keyword-control"} "if"] " " ...]]`.
-//! The `:class` value uses the same space-separated hyphenated hierarchical
-//! classes as the HTML backend, so naming is consistent across formats. Spans
-//! nest, so we build a stack of frames and render each on `close`.
+//! By default the `:class` value uses the same space-separated hyphenated
+//! hierarchical classes as the other backends. With `--inline` the [`Styler`]
+//! instead resolves each scope to a `:style` string from the theme, and a base
+//! style goes on the `:pre`. Spans nest, so we build a stack of frames and
+//! render each on `close`.
 
-use super::{classes, Backend};
+use super::{Attr, Backend, Styler};
 
 struct Frame {
     /// `None` for the implicit root (the `[:code ...]` children).
-    class: Option<String>,
+    scope: Option<String>,
     children: Vec<String>,
 }
 
 pub struct EdnHiccupBackend {
     stack: Vec<Frame>,
+    styler: Styler,
 }
 
 impl EdnHiccupBackend {
-    pub fn new() -> Self {
+    pub fn new(styler: Styler) -> Self {
         Self {
             stack: vec![Frame {
-                class: None,
+                scope: None,
                 children: Vec::new(),
             }],
+            styler,
         }
     }
 }
@@ -31,7 +35,7 @@ impl EdnHiccupBackend {
 impl Backend for EdnHiccupBackend {
     fn open(&mut self, scope: &str) {
         self.stack.push(Frame {
-            class: Some(scope.to_string()),
+            scope: Some(scope.to_string()),
             children: Vec::new(),
         });
     }
@@ -47,7 +51,7 @@ impl Backend for EdnHiccupBackend {
 
     fn close(&mut self) {
         let frame = self.stack.pop().expect("close without matching open");
-        let rendered = render(&frame);
+        let rendered = render(&self.styler, &frame);
         if let Some(parent) = self.stack.last_mut() {
             parent.children.push(rendered);
         }
@@ -55,7 +59,12 @@ impl Backend for EdnHiccupBackend {
 
     fn finish(self: Box<Self>) -> String {
         let root = &self.stack[0];
-        let mut out = String::from("[:div.dathan [:pre [:code");
+        let mut out = String::from("[:div.dathan [:pre");
+        if let Some(attr) = self.styler.base_attr() {
+            out.push(' ');
+            out.push_str(&attr_map(&attr));
+        }
+        out.push_str(" [:code");
         for child in &root.children {
             out.push(' ');
             out.push_str(child);
@@ -65,15 +74,24 @@ impl Backend for EdnHiccupBackend {
     }
 }
 
-fn render(frame: &Frame) -> String {
-    let scope = frame.class.as_deref().unwrap_or_default();
-    let mut out = format!("[:span {{:class {}}}", edn_string(&classes(scope)));
+fn render(styler: &Styler, frame: &Frame) -> String {
+    let scope = frame.scope.as_deref().unwrap_or_default();
+    let mut out = String::from("[:span");
+    if let Some(attr) = styler.span_attr(scope) {
+        out.push(' ');
+        out.push_str(&attr_map(&attr));
+    }
     for child in &frame.children {
         out.push(' ');
         out.push_str(child);
     }
     out.push(']');
     out
+}
+
+/// An EDN attribute map like `{:class "…"}`.
+fn attr_map(attr: &Attr) -> String {
+    format!("{{:{} {}}}", attr.name, edn_string(&attr.value))
 }
 
 /// Render a Rust string as an EDN string literal.
@@ -97,10 +115,22 @@ fn edn_string(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::Theme;
+
+    fn inline_theme() -> Theme {
+        let table = toml::from_str::<toml::Value>(
+            r##"
+"ui.text" = "#cccccc"
+"keyword.function" = "#ff0000"
+"##,
+        )
+        .unwrap();
+        Theme::from_table(table.as_table().unwrap())
+    }
 
     #[test]
     fn nested_hiccup_and_edn_escaping() {
-        let mut b = Box::new(EdnHiccupBackend::new());
+        let mut b = Box::new(EdnHiccupBackend::new(Styler::Classes));
         b.open("keyword.function");
         b.text("fn");
         b.close();
@@ -109,6 +139,22 @@ mod tests {
         assert_eq!(
             out,
             "[:div.dathan [:pre [:code [:span {:class \"keyword keyword-function\"} \"fn\"] \"\\t\\\"x\\\"\\n\"]]]\n"
+        );
+    }
+
+    #[test]
+    fn inline_styles_and_base() {
+        let mut b = Box::new(EdnHiccupBackend::new(Styler::Inline(inline_theme())));
+        b.open("keyword.function");
+        b.text("fn");
+        b.close();
+        b.open("variable"); // unstyled -> no attr map
+        b.text("x");
+        b.close();
+        let out = b.finish();
+        assert_eq!(
+            out,
+            "[:div.dathan [:pre {:style \"color: #cccccc\"} [:code [:span {:style \"color: #ff0000\"} \"fn\"] [:span \"x\"]]]]\n"
         );
     }
 }

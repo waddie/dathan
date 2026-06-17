@@ -16,22 +16,18 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueEnum};
 
-use backend::{
-    Backend, EdnHiccupBackend, HtmlBackend, HtmlInlineBackend, JsonHiccupBackend, TerminalBackend,
-};
+use backend::{Backend, EdnHiccupBackend, HtmlBackend, JsonHiccupBackend, Styler, TerminalBackend};
 use languages::Loader;
 use runtime::{Runtime, home_dir};
 use theme::Theme;
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, ValueEnum)]
 enum Format {
+    /// ANSI terminal escape codes (theme-aware).
+    Terminal,
     Html,
     EdnHiccup,
     JsonHiccup,
-    /// ANSI terminal escape codes (theme-aware).
-    Terminal,
-    /// HTML with inline `style` attributes (theme-aware).
-    HtmlInline,
 }
 
 #[derive(Parser)]
@@ -46,6 +42,11 @@ struct Cli {
     /// Output format.
     #[arg(long, value_enum, default_value = "terminal")]
     format: Format,
+
+    /// For the class-based formats (html, edn-hiccup, json-hiccup), emit
+    /// theme-resolved inline `style`s instead of `class`es.
+    #[arg(long)]
+    inline: bool,
 
     /// Override detected language by name (e.g. `rust`).
     #[arg(long)]
@@ -97,16 +98,21 @@ fn main() -> Result<()> {
         }
     };
 
+    if cli.inline && cli.format == Format::Terminal {
+        return Err(anyhow!(
+            "--inline applies only to the class-based formats (html, edn-hiccup, json-hiccup)"
+        ));
+    }
+
     let merged = load_languages(&cli)?;
 
     // Build the backend before the loader consumes `rt`; the theme-aware
     // backends need the runtime to locate themes.
     let mut backend: Box<dyn Backend> = match cli.format {
-        Format::Html => Box::new(HtmlBackend::new()),
-        Format::EdnHiccup => Box::new(EdnHiccupBackend::new()),
-        Format::JsonHiccup => Box::new(JsonHiccupBackend::new()),
         Format::Terminal => Box::new(TerminalBackend::new(load_theme(&cli, &rt)?)),
-        Format::HtmlInline => Box::new(HtmlInlineBackend::new(load_theme(&cli, &rt)?)),
+        Format::Html => Box::new(HtmlBackend::new(make_styler(&cli, &rt)?)),
+        Format::EdnHiccup => Box::new(EdnHiccupBackend::new(make_styler(&cli, &rt)?)),
+        Format::JsonHiccup => Box::new(JsonHiccupBackend::new(make_styler(&cli, &rt)?)),
     };
 
     let loader = Loader::new(rt, merged)?;
@@ -170,6 +176,16 @@ fn load_languages(cli: &Cli) -> Result<toml::Value> {
     };
 
     languages::merge_configs(&base, overlay.as_deref())
+}
+
+/// Build the [`Styler`] for a class-based backend: inline theme-resolved styles
+/// when `--inline` is set, otherwise hierarchical classes.
+fn make_styler(cli: &Cli, rt: &Runtime) -> Result<Styler> {
+    if cli.inline {
+        Ok(Styler::Inline(load_theme(cli, rt)?))
+    } else {
+        Ok(Styler::Classes)
+    }
 }
 
 /// Load the theme for a theme-aware backend, falling back to the bundled
