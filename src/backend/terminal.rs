@@ -12,12 +12,19 @@ use crate::style::Style;
 use crate::theme::Theme;
 
 const RESET: &str = "\x1b[0m";
+/// Erase-in-Line (to end): paints from the cursor to the right edge with the
+/// current background, so the theme background reaches the full terminal width
+/// rather than stopping at the last character of each line.
+const CLEAR_EOL: &str = "\x1b[K";
 
 pub struct TerminalBackend {
     out: String,
     theme: Theme,
     /// Styles for open spans; `stack[0]` is the never-popped base style.
     stack: Vec<Style>,
+    /// Whether the current line has content past the last emitted `CLEAR_EOL`,
+    /// so `finish` knows to fill the final line's tail.
+    line_dirty: bool,
 }
 
 impl TerminalBackend {
@@ -31,6 +38,7 @@ impl TerminalBackend {
             out: String::new(),
             theme,
             stack: vec![base],
+            line_dirty: false,
         };
         backend.emit_current();
         backend
@@ -55,7 +63,17 @@ impl Backend for TerminalBackend {
     }
 
     fn text(&mut self, text: &str) {
-        self.out.push_str(text);
+        // Fill each line's trailing cells with the active background by erasing
+        // to end-of-line before every newline.
+        let mut rest = text;
+        while let Some(idx) = rest.find('\n') {
+            self.out.push_str(&rest[..idx]);
+            self.out.push_str(CLEAR_EOL);
+            self.out.push('\n');
+            rest = &rest[idx + 1..];
+        }
+        self.out.push_str(rest);
+        self.line_dirty = !rest.is_empty();
     }
 
     fn close(&mut self) {
@@ -68,6 +86,12 @@ impl Backend for TerminalBackend {
 
     fn finish(self: Box<Self>) -> String {
         let mut out = self.out;
+        // Fill the final line's tail too, unless the source already ended on a
+        // newline (whose line was filled when it was emitted) — avoids an extra
+        // background-coloured blank line.
+        if self.line_dirty {
+            out.push_str(CLEAR_EOL);
+        }
         out.push_str(RESET);
         out.push('\n');
         out
@@ -117,11 +141,35 @@ keyword = { fg = "#ff0000", modifiers = ["bold"] }
         let out = b.finish();
         assert_eq!(
             out,
-            // base (ui.text) -> open keyword (red bold) -> close back to base -> reset
+            // base (ui.text) -> open keyword (red bold) -> close back to base ->
+            // fill the final line's tail -> reset
             "\x1b[0m\x1b[38;2;204;204;204m\
              \x1b[0m\x1b[38;2;255;0;0;1mfn\
              \x1b[0m\x1b[38;2;204;204;204m x\
-             \x1b[0m\n"
+             \x1b[K\x1b[0m\n"
         );
+    }
+
+    #[test]
+    fn fills_each_line_to_the_edge() {
+        let mut b = Box::new(TerminalBackend::new(theme()));
+        b.text("a\nb");
+        let out = b.finish();
+        // Each newline is preceded by an erase-to-end-of-line, and the last
+        // line (no trailing newline) is filled before the reset.
+        assert_eq!(
+            out,
+            "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\nb\x1b[K\x1b[0m\n"
+        );
+    }
+
+    #[test]
+    fn does_not_fill_an_empty_trailing_line() {
+        let mut b = Box::new(TerminalBackend::new(theme()));
+        b.text("a\n");
+        let out = b.finish();
+        // Source ended on a newline: that line was filled when emitted, and no
+        // extra erase is added for the empty final line.
+        assert_eq!(out, "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\n\x1b[0m\n");
     }
 }

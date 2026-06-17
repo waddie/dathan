@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.1 (2026-06-17)
+
+### Fixed
+
+- `terminal` backgrounds extend to line end
+
 ## v0.6.0 (2026-06-17)
 
 ### Added
