@@ -67,8 +67,9 @@ as `--emit-css`, and fall back to the bundled `default` theme when none is found
 
 `--theme` takes either a path to a `theme.toml` or a bare name. A name that
 isn’t an existing path is resolved to `<name>.toml` in the runtime `themes/`
-dirs (each runtime root’s `themes/`, then `~/.config/helix/themes`), so
-`--theme acid` picks up `acid.toml` from the runtime.
+dirs (`--runtime` `themes/`, then `~/.config/helix/themes`, then each remaining
+runtime root’s `themes/`), so `--theme acid` picks up `acid.toml` from the
+runtime.
 
 A scope’s style is resolved by longest dotted prefix (e.g. `function.builtin`
 falls back to `function`), matching Helix.
@@ -100,8 +101,8 @@ Replace `pbcopy` with `xclip`/`xsel`/`clip`/etc. depending on your platform.
 Runtime roots are searched in this order, first match wins:
 
 1. `--runtime` paths
-2. `$HELIX_RUNTIME`
-3. `~/.config/helix/runtime`
+2. `~/.config/helix/runtime`
+3. `$HELIX_RUNTIME`
 
 The language registry is read from `~/source/helix/languages.toml` (or
 `--languages`), with `~/.config/helix/languages.toml` merged over it by language

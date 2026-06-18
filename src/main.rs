@@ -225,22 +225,26 @@ fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {
     first_existing(candidates).ok_or_else(|| anyhow!("no theme.toml found; pass --theme <path>"))
 }
 
-/// The `themes/` dirs to search for a theme by name, in priority order: each
-/// runtime root's `themes/` subdir, then the user config themes dir.
+/// The `themes/` dirs to search for a theme by name, in priority order:
+/// `--runtime` overrides' `themes/`, then the user config themes dir, then the
+/// remaining runtime roots' `themes/` (config runtime, then `$HELIX_RUNTIME`).
 fn runtime_theme_dirs(rt: &Runtime) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
-    for root in rt.roots() {
+    for root in rt.override_roots() {
         dirs.push(root.join("themes"));
     }
     if let Some(home) = home_dir() {
         dirs.push(home.join(".config/helix/themes"));
     }
+    for root in rt.config_roots() {
+        dirs.push(root.join("themes"));
+    }
     dirs
 }
 
 /// Directories to search for parent themes referenced via `inherits`, in
-/// priority order: the selected theme's own directory, then each runtime root's
-/// `themes/` subdir, then the user config themes dir (mirroring Helix).
+/// priority order: the selected theme's own directory, then the runtime
+/// `themes/` dirs (see `runtime_theme_dirs`), mirroring Helix.
 fn theme_dirs(theme_path: &Path, rt: &Runtime) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(parent) = theme_path.parent() {
