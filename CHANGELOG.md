@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.3 (2026-06-18)
+
+### Fixed
+
+- Suppress redundant newline
+
 ## v0.6.2 (2026-06-18)
 
 ### Added

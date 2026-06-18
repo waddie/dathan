@@ -25,6 +25,10 @@ pub struct TerminalBackend {
     /// Whether the current line has content past the last emitted `CLEAR_EOL`,
     /// so `finish` knows to fill the final line's tail.
     line_dirty: bool,
+    /// Whether the last text emission ended on a newline, so `finish` can avoid
+    /// appending a second one (it only terminates the block when the content did
+    /// not already end on a line boundary).
+    ended_with_newline: bool,
 }
 
 impl TerminalBackend {
@@ -39,6 +43,7 @@ impl TerminalBackend {
             theme,
             stack: vec![base],
             line_dirty: false,
+            ended_with_newline: false,
         };
         backend.emit_current();
         backend
@@ -63,6 +68,7 @@ impl Backend for TerminalBackend {
     }
 
     fn text(&mut self, text: &str) {
+        let before = self.out.len();
         // Fill each line's trailing cells with the active background by erasing
         // to end-of-line before every newline.
         let mut rest = text;
@@ -95,6 +101,13 @@ impl Backend for TerminalBackend {
             self.out.push_str(rest);
             self.line_dirty = !rest.is_empty();
         }
+        // Record whether the content emitted in this call ended on a newline,
+        // skipping no-op calls (e.g. empty text) so a prior `true` is preserved.
+        // A trailing `0x0A` is unambiguous in UTF-8 (no multibyte sequence ends
+        // in it).
+        if self.out.len() > before {
+            self.ended_with_newline = self.out.as_bytes()[self.out.len() - 1] == b'\n';
+        }
     }
 
     fn close(&mut self) {
@@ -114,7 +127,12 @@ impl Backend for TerminalBackend {
             out.push_str(CLEAR_EOL);
         }
         out.push_str(RESET);
-        out.push('\n');
+        // Only terminate the block when the content did not already end on a
+        // newline, so re-running on a newline-terminated source is idempotent
+        // rather than adding a trailing blank line.
+        if !self.ended_with_newline {
+            out.push('\n');
+        }
         out
     }
 }
@@ -203,8 +221,22 @@ keyword = { fg = "#ff0000", modifiers = ["bold"] }
         let mut b = Box::new(TerminalBackend::new(theme()));
         b.text("a\n");
         let out = b.finish();
-        // Source ended on a newline: that line was filled when emitted, and no
-        // extra erase is added for the empty final line.
-        assert_eq!(out, "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\n\x1b[0m\n");
+        // Source ended on a newline: that line was filled when emitted, no extra
+        // erase is added for the empty final line, and no second newline is
+        // appended (the content already ended on a line boundary).
+        assert_eq!(out, "\x1b[0m\x1b[38;2;204;204;204ma\x1b[K\n\x1b[0m");
+    }
+
+    #[test]
+    fn newline_ending_survives_a_trailing_close() {
+        let mut b = Box::new(TerminalBackend::new(theme()));
+        b.open("keyword");
+        b.text("a\n");
+        b.close();
+        let out = b.finish();
+        // The close after the final newline emits only SGR/RESET codes; it must
+        // not cause `finish` to append a second newline.
+        assert!(!out.ends_with("\n\x1b[0m\n"));
+        assert!(out.ends_with("\x1b[0m"));
     }
 }
