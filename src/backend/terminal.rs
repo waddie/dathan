@@ -108,7 +108,7 @@ impl Backend for TerminalBackend {
     fn finish(self: Box<Self>) -> String {
         let mut out = self.out;
         // Fill the final line's tail too, unless the source already ended on a
-        // newline (whose line was filled when it was emitted) — avoids an extra
+        // newline (whose line was filled when it was emitted), avoiding an extra
         // background-coloured blank line.
         if self.line_dirty {
             out.push_str(CLEAR_EOL);

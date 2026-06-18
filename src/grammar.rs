@@ -3,7 +3,7 @@
 //! Thin wrapper over `tree_house::tree_sitter::Grammar::new`, which dlopens the
 //! precompiled shared library, resolves the `tree_sitter_<name>` symbol, leaks
 //! the library so the grammar outlives it, and verifies the ABI version
-//! (13..=15) — exactly how Helix loads grammars.
+//! (13..=15) - the same way Helix loads grammars.
 
 use std::path::PathBuf;
 

@@ -1,4 +1,4 @@
-//! dathan — highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal
+//! dathan - highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal
 //! output using Helix's tree-sitter grammars and queries.
 
 mod backend;
@@ -13,12 +13,12 @@ mod theme;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 
 use backend::{Backend, EdnHiccupBackend, HtmlBackend, JsonHiccupBackend, Styler, TerminalBackend};
 use languages::Loader;
-use runtime::{Runtime, home_dir};
+use runtime::{home_dir, Runtime};
 use theme::Theme;
 
 #[derive(Clone, Copy, PartialEq, ValueEnum)]
