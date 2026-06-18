@@ -85,6 +85,16 @@ dathan --theme acid src/main.rs
 dathan --format html --inline src/main.rs -o main.html
 ```
 
+### From Helix
+
+From Helix, you can pipe selections through `dathan` to your clipboard management program:
+
+```toml
+space.B.d = ":pipe-to dathan --format html --lang %{language} | pbcopy"
+```
+
+Replace `pbcopy` with `xclip`/`xsel`/`clip`/etc. depending on your platform.
+
 ## Runtime discovery
 
 Runtime roots are searched in this order, first match wins:
