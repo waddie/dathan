@@ -50,7 +50,7 @@ impl Styler {
                 name: "class",
                 value: classes(scope),
             }),
-            Styler::Inline(theme) => inline_attr(theme.resolve(scope)),
+            Styler::Inline(theme) => inline_attr(&theme.resolve(scope)),
         }
     }
 
@@ -59,7 +59,7 @@ impl Styler {
     pub(crate) fn base_attr(&self) -> Option<Attr> {
         match self {
             Styler::Classes => None,
-            Styler::Inline(theme) => inline_attr(Style {
+            Styler::Inline(theme) => inline_attr(&Style {
                 fg: theme.resolve("ui.text").fg,
                 bg: theme.resolve("ui.background").bg,
                 modifiers: Vec::new(),
@@ -70,7 +70,7 @@ impl Styler {
 
 /// A `style` attribute for the resolved style, or `None` if it has no
 /// declarations.
-fn inline_attr(style: Style) -> Option<Attr> {
+fn inline_attr(style: &Style) -> Option<Attr> {
     let decls = style.css_declarations();
     if decls.is_empty() {
         None

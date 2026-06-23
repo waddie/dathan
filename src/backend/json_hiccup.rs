@@ -8,6 +8,7 @@
 //! and render each on `close`.
 
 use super::{Attr, Backend, Styler};
+use std::fmt::Write as _;
 
 struct Frame {
     /// `None` for the implicit root (the `["code", ...]` children).
@@ -66,8 +67,7 @@ impl Backend for JsonHiccupBackend {
         let pre_attr = self
             .styler
             .base_attr()
-            .map(|attr| attr_object(&attr))
-            .unwrap_or_else(|| "{}".to_string());
+            .map_or_else(|| "{}".to_string(), |attr| attr_object(&attr));
         format!("[\"div\",{{\"class\":\"dathan\"}},[\"pre\",{pre_attr},{code}]]\n")
     }
 }
@@ -107,7 +107,9 @@ fn json_string(text: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
     }

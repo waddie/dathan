@@ -1,6 +1,6 @@
 [package]
 name = "dathan"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 description = "Highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal output using Helix's tree-sitter grammars"
 

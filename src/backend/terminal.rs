@@ -143,10 +143,10 @@ fn cumulative(stack: &[Style]) -> Style {
     let mut out = Style::default();
     for style in stack {
         if style.fg.is_some() {
-            out.fg = style.fg.clone();
+            out.fg.clone_from(&style.fg);
         }
         if style.bg.is_some() {
-            out.bg = style.bg.clone();
+            out.bg.clone_from(&style.bg);
         }
         for &m in &style.modifiers {
             out.push_modifier(m);

@@ -13,12 +13,12 @@ mod theme;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueEnum};
 
 use backend::{Backend, EdnHiccupBackend, HtmlBackend, JsonHiccupBackend, Styler, TerminalBackend};
 use languages::Loader;
-use runtime::{home_dir, Runtime};
+use runtime::{Runtime, home_dir};
 use theme::Theme;
 
 #[derive(Clone, Copy, PartialEq, ValueEnum)]
@@ -86,17 +86,14 @@ fn main() -> Result<()> {
     }
 
     let file = cli.file.as_deref();
-    let source = match file {
-        Some(path) => {
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
-        }
-        None => {
-            let mut buf = String::new();
-            std::io::stdin()
-                .read_to_string(&mut buf)
-                .context("reading from stdin")?;
-            buf
-        }
+    let source = if let Some(path) = file {
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
+    } else {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("reading from stdin")?;
+        buf
     };
 
     if cli.inline && cli.format == Format::Terminal {
@@ -264,13 +261,10 @@ where
 }
 
 fn write_output(output: Option<&Path>, content: &str) -> Result<()> {
-    match output {
-        Some(path) => {
-            std::fs::write(path, content).with_context(|| format!("writing {}", path.display()))
-        }
-        None => {
-            print!("{content}");
-            Ok(())
-        }
+    if let Some(path) = output {
+        std::fs::write(path, content).with_context(|| format!("writing {}", path.display()))
+    } else {
+        print!("{content}");
+        Ok(())
     }
 }

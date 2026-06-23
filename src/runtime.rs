@@ -112,7 +112,7 @@ mod tests {
         assert_eq!(fs::read_to_string(found).unwrap(), "config");
 
         // With an override, it wins over everything.
-        let rt = Runtime::new(&[override_rt.clone()]);
+        let rt = Runtime::new(std::slice::from_ref(&override_rt));
         let found = rt.find_file(rel).unwrap();
         assert!(
             found.starts_with(&override_rt),

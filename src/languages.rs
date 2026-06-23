@@ -81,7 +81,7 @@ impl Loader {
         let mut by_shebang = HashMap::new();
 
         for (i, l) in raw.language.into_iter().enumerate() {
-            let lang = Language::new(i as u32);
+            let lang = Language::new(u32::try_from(i).expect("language index fits in u32"));
             by_name.insert(l.name.clone(), lang);
 
             for ft in &l.file_types {
@@ -137,7 +137,7 @@ impl Loader {
             rec.push(name.to_string());
             rec.len() - 1
         });
-        Highlight::new(idx as u32)
+        Highlight::new(u32::try_from(idx).expect("capture index fits in u32"))
     }
 
     /// Compile grammar + queries into a configured `LanguageConfig`.
@@ -191,7 +191,9 @@ impl Loader {
                             .get("suffix")
                             .is_some_and(|s| name.ends_with(s.as_str()));
                     if hit {
-                        return Some(Language::new(i as u32));
+                        return Some(Language::new(
+                            u32::try_from(i).expect("language index fits in u32"),
+                        ));
                     }
                 }
             }
@@ -213,7 +215,9 @@ impl Loader {
                     let len = m.end() - m.start();
                     if len > best_len {
                         best_len = len;
-                        best = Some(Language::new(i as u32));
+                        best = Some(Language::new(
+                            u32::try_from(i).expect("language index fits in u32"),
+                        ));
                     }
                 }
             }

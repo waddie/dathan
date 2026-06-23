@@ -113,9 +113,9 @@ fn parse_hex(hex: &str) -> Option<(u8, u8, u8)> {
     match hex.len() {
         3 => {
             let mut it = hex.chars().map(|c| c.to_digit(16));
-            let r = it.next()?? as u8;
-            let g = it.next()?? as u8;
-            let b = it.next()?? as u8;
+            let r = u8::try_from(it.next()??).ok()?;
+            let g = u8::try_from(it.next()??).ok()?;
+            let b = u8::try_from(it.next()??).ok()?;
             // Expand `#abc` to `#aabbcc`.
             Some((r * 17, g * 17, b * 17))
         }

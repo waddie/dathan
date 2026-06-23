@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -92,7 +93,7 @@ impl Theme {
     /// Render the theme to a CSS stylesheet, one rule per scope keyed on the most
     /// specific class the HTML backend emits.
     pub fn to_css(&self) -> String {
-        let mut css = String::from("");
+        let mut css = String::new();
         css.push_str(".dathan {\n");
         // Container colours, mirroring the base attribute the inline HTML backend
         // sets on `<pre>` from `ui.text` / `ui.background`.
@@ -103,7 +104,7 @@ impl Theme {
         };
         let base_decls = base.css_declarations();
         if !base_decls.is_empty() {
-            css.push_str(&format!("  & > pre {{ {}; }}\n", base_decls.join("; ")));
+            let _ = writeln!(css, "  & > pre {{ {}; }}", base_decls.join("; "));
         }
         let mut scopes: Vec<(&String, &Style)> = self.scopes.iter().collect();
         scopes.sort_by(|a, b| a.0.cmp(b.0));
@@ -112,11 +113,7 @@ impl Theme {
             if decls.is_empty() {
                 continue;
             }
-            css.push_str(&format!(
-                "  .{} {{ {}; }}\n",
-                css_class(scope),
-                decls.join("; ")
-            ));
+            let _ = writeln!(css, "  .{} {{ {}; }}", css_class(scope), decls.join("; "));
         }
         css.push_str("}\n");
         css

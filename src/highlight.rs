@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use ropey::RopeSlice;
 use tree_house::highlighter::{Highlight, HighlightEvent, Highlighter};
 use tree_house::{Language, Syntax};
@@ -25,7 +25,7 @@ pub fn highlight(
     backend: &mut dyn Backend,
 ) -> Result<()> {
     let rope = RopeSlice::from(source);
-    let len = source.len() as u32;
+    let len = u32::try_from(source.len()).unwrap_or(u32::MAX);
 
     let syntax = Syntax::new(rope, lang, PARSE_TIMEOUT, loader)
         .map_err(|e| anyhow!("failed to parse source: {e:?}"))?;
