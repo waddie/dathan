@@ -68,6 +68,10 @@ impl Backend for TerminalBackend {
     }
 
     fn text(&mut self, text: &str) {
+        // A no-op call must not disturb `line_dirty` / `ended_with_newline`.
+        if text.is_empty() {
+            return;
+        }
         let before = self.out.len();
         // Fill each line's trailing cells with the active background by erasing
         // to end-of-line before every newline.

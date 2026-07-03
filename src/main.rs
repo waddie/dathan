@@ -85,6 +85,12 @@ fn main() -> Result<()> {
         return write_output(cli.output.as_deref(), &css);
     }
 
+    if cli.inline && cli.format == Format::Terminal {
+        return Err(anyhow!(
+            "--inline applies only to the class-based formats (html, edn-hiccup, json-hiccup)"
+        ));
+    }
+
     let file = cli.file.as_deref();
     let source = if let Some(path) = file {
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
@@ -95,12 +101,6 @@ fn main() -> Result<()> {
             .context("reading from stdin")?;
         buf
     };
-
-    if cli.inline && cli.format == Format::Terminal {
-        return Err(anyhow!(
-            "--inline applies only to the class-based formats (html, edn-hiccup, json-hiccup)"
-        ));
-    }
 
     let merged = load_languages(&cli)?;
 
@@ -145,20 +145,23 @@ fn detect_language(
         })
 }
 
-/// Load the base `languages.toml` and merge the user config over it (by
-/// language name), mirroring how Helix layers user config on the default.
+/// Load the base `languages.toml` (`--languages`, else the `$HELIX_RUNTIME`-
+/// adjacent config, else the user config) and, unless the user config is itself
+/// the base, merge it over the base by language name, mirroring how Helix layers
+/// user config on the default.
 fn load_languages(cli: &Cli) -> Result<toml::Value> {
     let user_path = home_dir().map(|h| h.join(".config/helix/languages.toml"));
+
+    // A full base `languages.toml` sits next to a Helix runtime tree (as in a
+    // source checkout referenced by `$HELIX_RUNTIME`); the user config is an
+    // overlay merged over it, so prefer the runtime-adjacent base when present.
+    let env_base = std::env::var_os("HELIX_RUNTIME")
+        .and_then(|rt| Path::new(&rt).parent().map(|p| p.join("languages.toml")));
 
     let base_path = cli
         .languages
         .clone()
-        .or_else(|| {
-            first_existing([
-                home_dir().map(|h| h.join("source/helix/languages.toml")),
-                user_path.clone(),
-            ])
-        })
+        .or_else(|| first_existing([env_base, user_path.clone()]))
         .ok_or_else(|| anyhow!("no languages.toml found; pass --languages <path>"))?;
 
     let base = std::fs::read_to_string(&base_path)
@@ -195,7 +198,10 @@ fn load_theme(cli: &Cli, rt: &Runtime) -> Result<Theme> {
             let dirs = theme_dirs(&path, rt);
             Theme::load(&path, &dirs)
         }
-        Err(_) => Ok(Theme::bundled_default()),
+        // Only fall back when no theme was requested; a --theme that cannot
+        // be resolved is an error.
+        Err(_) if cli.theme.is_none() => Ok(Theme::bundled_default()),
+        Err(e) => Err(e),
     }
 }
 
@@ -214,11 +220,11 @@ fn resolve_theme(cli: &Cli, rt: &Runtime) -> Result<PathBuf> {
         return first_existing(candidates)
             .ok_or_else(|| anyhow!("theme not found by path or name: {}", theme.display()));
     }
-    let mut candidates = vec![home_dir().map(|h| h.join("source/helix/theme.toml"))];
     // A theme bundled alongside any runtime root's parent.
-    for root in rt.roots() {
-        candidates.push(root.parent().map(|p| p.join("theme.toml")));
-    }
+    let candidates = rt
+        .roots()
+        .iter()
+        .map(|root| root.parent().map(|p| p.join("theme.toml")));
     first_existing(candidates).ok_or_else(|| anyhow!("no theme.toml found; pass --theme <path>"))
 }
 

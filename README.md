@@ -80,8 +80,8 @@ Examples:
 dathan src/main.rs
 dathan --format html src/main.rs -o main.html
 cat src/main.rs | dathan --lang rust
-dathan --emit-css --theme ~/source/helix/theme.toml -o theme.css
-dathan --format terminal --theme ~/source/helix/theme.toml src/main.rs
+dathan --emit-css --theme acid -o theme.css
+dathan --format terminal --theme ~/.config/helix/themes/acid.toml src/main.rs
 dathan --theme acid src/main.rs
 dathan --format html --inline src/main.rs -o main.html
 ```
@@ -104,11 +104,13 @@ Runtime roots are searched in this order, first match wins:
 2. `~/.config/helix/runtime`
 3. `$HELIX_RUNTIME`
 
-The language registry is read from `~/source/helix/languages.toml` (or
-`--languages`), with `~/.config/helix/languages.toml` merged over it by language
-name.
+The base language registry is `--languages` if given, otherwise a
+`languages.toml` next to the `$HELIX_RUNTIME` tree (as in a Helix source
+checkout), otherwise `~/.config/helix/languages.toml`. When the base comes from
+`--languages` or `$HELIX_RUNTIME`, `~/.config/helix/languages.toml` is merged
+over it by language name.
 
-Language detection uses the file extension, then `file-types` globs, then a
+Language detection uses `file-types` globs, then the file extension, then a
 `#!` shebang line. Override with `--lang`.
 
 ## Output

@@ -172,33 +172,41 @@ impl Loader {
         self.by_name.get(name).copied()
     }
 
-    /// Detect by extension, then by glob/suffix `file-types` entries.
+    /// Detect by glob/suffix `file-types` entries first (the longest matching
+    /// pattern wins), then by extension, mirroring Helix's precedence.
     pub fn language_for_filename(&self, path: &Path) -> Option<Language> {
-        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if let Some(&lang) = self.by_extension.get(ext) {
-                return Some(lang);
-            }
-        }
+        let path_str = path.to_str().unwrap_or_default();
         let name = path
             .file_name()
             .and_then(|f| f.to_str())
             .unwrap_or_default();
+
+        // (pattern length, language index) of the best glob/suffix hit so far.
+        let mut best: Option<(usize, usize)> = None;
         for (i, data) in self.langs.iter().enumerate() {
             for ft in &data.file_types {
                 if let FileType::Special(map) = ft {
-                    let hit = map.get("glob").is_some_and(|g| glob_match(g, name))
-                        || map
-                            .get("suffix")
-                            .is_some_and(|s| name.ends_with(s.as_str()));
-                    if hit {
-                        return Some(Language::new(
-                            u32::try_from(i).expect("language index fits in u32"),
-                        ));
+                    let hit = map
+                        .get("glob")
+                        .filter(|g| glob_match(g, path_str))
+                        .or_else(|| map.get("suffix").filter(|s| name.ends_with(s.as_str())));
+                    if let Some(pattern) = hit {
+                        if best.is_none_or(|(len, _)| pattern.len() > len) {
+                            best = Some((pattern.len(), i));
+                        }
                     }
                 }
             }
         }
-        None
+        if let Some((_, i)) = best {
+            return Some(Language::new(
+                u32::try_from(i).expect("language index fits in u32"),
+            ));
+        }
+
+        path.extension()
+            .and_then(|e| e.to_str())
+            .and_then(|ext| self.by_extension.get(ext).copied())
     }
 
     /// Resolve an injected-language token: exact name first, then the longest
@@ -266,13 +274,46 @@ fn slice_to_string(slice: RopeSlice) -> String {
     String::from(slice)
 }
 
-/// Minimal glob: supports a leading `*` wildcard (suffix match) or an exact
-/// filename match. Sufficient for the `file-types` globs Helix ships.
-fn glob_match(pattern: &str, name: &str) -> bool {
-    match pattern.strip_prefix('*') {
-        Some(suffix) => name.ends_with(suffix),
-        None => pattern == name,
+/// Match a Helix `file-types` glob against a path, mirroring how Helix uses
+/// `globset` with default settings: `*` matches any characters, `/` included.
+/// A pattern starting with `/` is anchored to the whole path; any other
+/// pattern matches from a path component boundary (Helix prepends `*/`), plus
+/// from the start so a bare filename like `.gitignore` still matches.
+fn glob_match(pattern: &str, path: &str) -> bool {
+    if pattern.starts_with('/') {
+        return wildcard_match(pattern, path);
     }
+    std::iter::once(0)
+        .chain(path.match_indices('/').map(|(i, _)| i + 1))
+        .any(|start| wildcard_match(pattern, &path[start..]))
+}
+
+/// Wildcard match where `*` matches any (possibly empty) run of characters
+/// and everything else is literal. Greedy with backtracking. Operates on
+/// bytes, which is UTF-8 safe because `*` is the only metacharacter and it
+/// matches arbitrary byte runs.
+fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let (p, t) = (pattern.as_bytes(), text.as_bytes());
+    let (mut pi, mut ti) = (0, 0);
+    // Position after the most recent `*` and the text position it matched at.
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        if pi < p.len() && p[pi] == b'*' {
+            star = Some((pi + 1, ti));
+            pi += 1;
+        } else if pi < p.len() && p[pi] == t[ti] {
+            pi += 1;
+            ti += 1;
+        } else if let Some((sp, st)) = star {
+            // Backtrack: let the last `*` swallow one more byte.
+            pi = sp;
+            ti = st + 1;
+            star = Some((sp, st + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|&b| b == b'*')
 }
 
 /// Deep-merge an `overlay` `languages.toml` onto a `base`, the way Helix merges
@@ -334,10 +375,85 @@ mod tests {
 
     #[test]
     fn glob_matching() {
-        assert!(glob_match("*.toml", "Cargo.toml"));
+        // Bare filename patterns, at any depth or as the whole path.
         assert!(glob_match("Makefile", "Makefile"));
+        assert!(glob_match("Makefile", "src/Makefile"));
         assert!(!glob_match("Makefile", "makefile"));
+        assert!(!glob_match("Makefile", "notMakefile"));
+        // `*` anywhere, including patterns Helix ships.
+        assert!(glob_match("*.toml", "dir/Cargo.toml"));
+        assert!(glob_match(".*ignore", ".gitignore"));
+        assert!(glob_match(".env.*", "repo/.env.local"));
+        assert!(glob_match("_environment-*", "_environment-prod"));
         assert!(!glob_match("*.rs", "main.py"));
+        // Path-qualified patterns match trailing components.
+        assert!(glob_match(".git/config", "repo/.git/config"));
+        assert!(glob_match(".git/config", ".git/config"));
+        assert!(!glob_match(".git/config", "config"));
+        assert!(glob_match(
+            ".git/modules/*/config",
+            ".git/modules/sub/config"
+        ));
+        // Absolute patterns anchor to the whole path.
+        assert!(glob_match("/etc/hosts", "/etc/hosts"));
+        assert!(!glob_match("/etc/hosts", "/home/x/etc/hosts"));
+    }
+
+    fn detection_loader() -> Loader {
+        let config = r#"
+[[language]]
+name = "yaml"
+file-types = ["yml", "yaml"]
+
+[[language]]
+name = "docker-compose"
+grammar = "yaml"
+file-types = [{ glob = "docker-compose.yml" }, { glob = "docker-compose.yaml" }]
+
+[[language]]
+name = "gitignore"
+file-types = [{ glob = ".*ignore" }]
+
+[[language]]
+name = "git-config"
+file-types = [{ glob = ".git/config" }]
+"#;
+        Loader::new(
+            crate::runtime::Runtime::new(&[]),
+            toml::from_str(config).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn globs_take_precedence_over_extensions() {
+        let loader = detection_loader();
+        let lang = |name: &str| loader.language_for_name(name).unwrap();
+
+        // The glob beats the `yml` extension, at any depth.
+        assert_eq!(
+            loader.language_for_filename(Path::new("docker-compose.yml")),
+            Some(lang("docker-compose"))
+        );
+        assert_eq!(
+            loader.language_for_filename(Path::new("deploy/docker-compose.yml")),
+            Some(lang("docker-compose"))
+        );
+        // Extension fallback still works.
+        assert_eq!(
+            loader.language_for_filename(Path::new("ci.yml")),
+            Some(lang("yaml"))
+        );
+        // Wildcard and path-qualified globs.
+        assert_eq!(
+            loader.language_for_filename(Path::new(".gitignore")),
+            Some(lang("gitignore"))
+        );
+        assert_eq!(
+            loader.language_for_filename(Path::new("repo/.git/config")),
+            Some(lang("git-config"))
+        );
+        assert_eq!(loader.language_for_filename(Path::new("config")), None);
     }
 
     #[test]

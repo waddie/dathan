@@ -41,8 +41,6 @@ impl Backend for EdnHiccupBackend {
     }
 
     fn text(&mut self, text: &str) {
-        // The driver coalesces runs of equal scope, but tree-sitter can still
-        // split text at injection/event boundaries; merge adjacent literals.
         let literal = edn_string(text);
         if let Some(frame) = self.stack.last_mut() {
             frame.children.push(literal);

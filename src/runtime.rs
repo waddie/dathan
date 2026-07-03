@@ -75,6 +75,7 @@ pub fn home_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::fs;
 
     /// Create `<root>/grammars/<marker>.txt` so `find_file` has something to hit,
@@ -87,6 +88,30 @@ mod tests {
         root
     }
 
+    /// Set an env var for the test, restoring the previous value on drop
+    /// (including on panic) so other tests in the process are unaffected.
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
     #[test]
     fn config_runtime_beats_helix_runtime_and_overrides_win() {
         let base = std::env::temp_dir().join(format!("dathan-rt-{}", std::process::id()));
@@ -97,8 +122,8 @@ mod tests {
         let env_rt = seed_root(&base, "env-runtime", "env");
         let override_rt = seed_root(&base, "override", "override");
 
-        std::env::set_var("HOME", &home);
-        std::env::set_var("HELIX_RUNTIME", &env_rt);
+        let _home_guard = EnvGuard::set("HOME", &home);
+        let _runtime_guard = EnvGuard::set("HELIX_RUNTIME", &env_rt);
 
         let rel = Path::new("grammars/test.txt");
 
@@ -121,7 +146,6 @@ mod tests {
         assert_eq!(fs::read_to_string(found).unwrap(), "override");
         assert_eq!(rt.override_roots(), &[override_rt]);
 
-        std::env::remove_var("HELIX_RUNTIME");
         let _ = fs::remove_dir_all(&base);
     }
 }
