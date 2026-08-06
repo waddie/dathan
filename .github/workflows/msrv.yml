@@ -1,0 +1,60 @@
+name: MSRV
+
+# The declared `rust-version` is a promise about which compilers can build
+# dathan. Nothing else in CI exercises it: the release workflow builds on
+# `stable`, so a bump in a dependency's own MSRV, or a newer language feature
+# creeping into the source, would go unnoticed until someone on an older
+# toolchain tried to build.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  msrv:
+    name: Build on the declared MSRV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Read the pin from Cargo.toml rather than repeating it here, so the two
+      # cannot drift apart.
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        shell: bash
+        run: |
+          msrv="$(grep -m1 -E '^rust-version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ -z "$msrv" ]; then
+            echo "::error::Cargo.toml declares no rust-version" >&2
+            exit 1
+          fi
+          echo "version=$msrv" >> "$GITHUB_OUTPUT"
+          echo "Declared MSRV: $msrv"
+
+      - name: Install Rust ${{ steps.msrv.outputs.version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-msrv-${{ steps.msrv.outputs.version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # `--locked` is the point: this checks the versions that are actually
+      # resolved, so a dependency bump needing a newer compiler fails on the
+      # bump's own pull request. `--all-targets` covers the test code too.
+      - name: Check against the locked dependency set
+        run: cargo check --locked --all-targets

@@ -400,7 +400,12 @@ keyword = { fg = "#ff0000" }
 
     #[test]
     fn cycle_is_detected() {
-        let dir = std::env::temp_dir().join(format!("dathan-cycle-{}", std::process::id()));
+        // `temp_dir` reads `$TMPDIR`; the runtime tests write the environment.
+        let dir = {
+            let _env = crate::runtime::env_lock();
+            std::env::temp_dir()
+        }
+        .join(format!("dathan-cycle-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("a.toml"), "inherits = \"b\"\n").unwrap();
         std::fs::write(dir.join("b.toml"), "inherits = \"a\"\n").unwrap();

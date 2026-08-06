@@ -7,10 +7,10 @@
 
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use tree_house::tree_sitter::Grammar;
 
-use crate::runtime::{Runtime, DYLIB_EXT};
+use crate::runtime::{DYLIB_EXT, Runtime};
 
 /// Load the grammar named `name` from the first runtime root that provides it.
 pub fn load(name: &str, rt: &Runtime) -> Result<Grammar> {

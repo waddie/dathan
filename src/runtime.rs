@@ -72,6 +72,22 @@ pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
+/// Serialises every test that touches the process environment. `set_var` is
+/// unsound while another thread reads the environment, and `cargo test` runs
+/// tests in parallel, so readers (`Runtime::new`, `temp_dir`) must hold this
+/// too - not just the writers in `EnvGuard`.
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Take [`ENV_LOCK`], ignoring poisoning: a panicking test leaves the
+/// environment restored by `EnvGuard`'s `Drop`, so the data is still sound.
+#[cfg(test)]
+pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +106,8 @@ mod tests {
 
     /// Set an env var for the test, restoring the previous value on drop
     /// (including on panic) so other tests in the process are unaffected.
+    ///
+    /// Callers must hold [`env_lock`] for at least as long as the guard.
     struct EnvGuard {
         key: &'static str,
         prev: Option<OsString>,
@@ -98,22 +116,33 @@ mod tests {
     impl EnvGuard {
         fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
             let prev = std::env::var_os(key);
-            std::env::set_var(key, value);
+            // SAFETY: the caller holds `env_lock`, which every environment
+            // reader in the test suite also takes, so no other thread is in
+            // the environment while this writes.
+            unsafe { std::env::set_var(key, value) };
             Self { key, prev }
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
-            match &self.prev {
-                Some(v) => std::env::set_var(self.key, v),
-                None => std::env::remove_var(self.key),
+            // SAFETY: as in `set` - the guard is dropped before the `env_lock`
+            // guard that the test holds, so this still runs exclusively.
+            unsafe {
+                match &self.prev {
+                    Some(v) => std::env::set_var(self.key, v),
+                    None => std::env::remove_var(self.key),
+                }
             }
         }
     }
 
     #[test]
     fn config_runtime_beats_helix_runtime_and_overrides_win() {
+        // Declared first so it outlives the `EnvGuard`s below, which restore
+        // the environment on drop and so must also run under the lock.
+        let _env = env_lock();
+
         let base = std::env::temp_dir().join(format!("dathan-rt-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
 

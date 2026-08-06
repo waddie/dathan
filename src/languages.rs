@@ -190,10 +190,10 @@ impl Loader {
                         .get("glob")
                         .filter(|g| glob_match(g, path_str))
                         .or_else(|| map.get("suffix").filter(|s| name.ends_with(s.as_str())));
-                    if let Some(pattern) = hit {
-                        if best.is_none_or(|(len, _)| pattern.len() > len) {
-                            best = Some((pattern.len(), i));
-                        }
+                    if let Some(pattern) = hit
+                        && best.is_none_or(|(len, _)| pattern.len() > len)
+                    {
+                        best = Some((pattern.len(), i));
                     }
                 }
             }
@@ -218,15 +218,15 @@ impl Loader {
         let mut best_len = 0;
         let mut best = None;
         for (i, data) in self.langs.iter().enumerate() {
-            if let Some(re) = &data.injection_regex {
-                if let Some(m) = re.find(text) {
-                    let len = m.end() - m.start();
-                    if len > best_len {
-                        best_len = len;
-                        best = Some(Language::new(
-                            u32::try_from(i).expect("language index fits in u32"),
-                        ));
-                    }
+            if let Some(re) = &data.injection_regex
+                && let Some(m) = re.find(text)
+            {
+                let len = m.end() - m.start();
+                if len > best_len {
+                    best_len = len;
+                    best = Some(Language::new(
+                        u32::try_from(i).expect("language index fits in u32"),
+                    ));
                 }
             }
         }
@@ -418,11 +418,13 @@ file-types = [{ glob = ".*ignore" }]
 name = "git-config"
 file-types = [{ glob = ".git/config" }]
 "#;
-        Loader::new(
-            crate::runtime::Runtime::new(&[]),
-            toml::from_str(config).unwrap(),
-        )
-        .unwrap()
+        // `Runtime::new` reads `$HOME` and `$HELIX_RUNTIME`; the runtime tests
+        // write them, so this has to take the same lock.
+        let rt = {
+            let _env = crate::runtime::env_lock();
+            crate::runtime::Runtime::new(&[])
+        };
+        Loader::new(rt, toml::from_str(config).unwrap()).unwrap()
     }
 
     #[test]
