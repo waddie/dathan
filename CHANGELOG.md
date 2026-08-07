@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.9.0 (2026-08-07)
+
+### Added
+
+- `-V` / `--version`
+- `FILE` accepts several paths, concatenated in order like `cat`. Each is
+  detected separately, so mixed languages highlight per file
+
+### Changed
+
+- Repeating an option is no longer an error; the last occurrence wins.
+  `--runtime` still accumulates
+
 ## v0.6.3 (2026-06-18)
 
 ### Fixed

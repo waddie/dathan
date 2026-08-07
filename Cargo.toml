@@ -1,6 +1,6 @@
 [package]
 name = "dathan"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Highlight source code to HTML, Hiccup (EDN/JSON), or ANSI terminal output using Helix's tree-sitter grammars"

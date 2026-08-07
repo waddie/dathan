@@ -26,11 +26,18 @@ cargo install --path .
 ## Usage
 
 ```sh
-dathan [OPTIONS] [FILE]
+dathan [OPTIONS] [FILE]...
 ```
 
 If `FILE` is omitted, source is read from `stdin`. With `stdin` there is no filename
 to detect from, so pass `--lang` (or rely on a `#!` shebang line).
+
+Several files are concatenated in order into one output document, as `cat` does.
+Each is detected separately, so a mixed set is highlighted per file rather than
+all as the first file's language.
+
+Repeating an option is allowed; the last occurrence wins. `--runtime` is the
+exception: it accumulates.
 
 Options:
 
@@ -43,6 +50,7 @@ Options:
 --theme <path|name>          theme.toml path, or a bare name resolved against the runtime themes/ dirs.
 --emit-css                   Write a CSS stylesheet from the theme and exit. Ignores FILE.
 -o, --output <path>          Output file. Default: stdout.
+-V, --version                Print the version and exit.
 ```
 
 Formats:

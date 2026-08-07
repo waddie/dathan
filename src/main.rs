@@ -33,11 +33,16 @@ enum Format {
 #[derive(Parser)]
 #[command(
     name = "dathan",
+    version = concat!("v", env!("CARGO_PKG_VERSION")),
+    // Repeating an option overrides the earlier occurrence rather than erroring;
+    // `--runtime` is an Append arg and keeps accumulating.
+    args_override_self = true,
     about = "Highlight code to HTML, Hiccup (EDN/JSON), or ANSI terminal output via Helix grammars"
 )]
 struct Cli {
-    /// Source file to highlight (reads from stdin if omitted).
-    file: Option<PathBuf>,
+    /// Source files to highlight, concatenated in order (reads from stdin if
+    /// omitted).
+    file: Vec<PathBuf>,
 
     /// Output format.
     #[arg(long, value_enum, default_value = "terminal")]
@@ -91,15 +96,23 @@ fn main() -> Result<()> {
         ));
     }
 
-    let file = cli.file.as_deref();
-    let source = if let Some(path) = file {
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
-    } else {
+    // Read every input up front so a missing file fails before any grammar or
+    // theme work. `None` is stdin, which has no name to detect a language from.
+    let inputs: Vec<(Option<&Path>, String)> = if cli.file.is_empty() {
         let mut buf = String::new();
         std::io::stdin()
             .read_to_string(&mut buf)
             .context("reading from stdin")?;
-        buf
+        vec![(None, buf)]
+    } else {
+        cli.file
+            .iter()
+            .map(|path| {
+                let source = std::fs::read_to_string(path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                Ok((Some(path.as_path()), source))
+            })
+            .collect::<Result<_>>()?
     };
 
     let merged = load_languages(&cli)?;
@@ -115,15 +128,19 @@ fn main() -> Result<()> {
 
     let loader = Loader::new(rt, merged)?;
 
-    let lang = detect_language(&loader, &cli, file, &source).ok_or_else(|| match file {
-        Some(path) => anyhow!(
-            "could not determine language for {} (try --lang)",
-            path.display()
-        ),
-        None => anyhow!("could not determine language for stdin (try --lang)"),
-    })?;
+    // One document, each input highlighted as its own language: the backend
+    // writes its container once, and the driver leaves no state between calls.
+    for (file, source) in &inputs {
+        let lang = detect_language(&loader, &cli, *file, source).ok_or_else(|| match file {
+            Some(path) => anyhow!(
+                "could not determine language for {} (try --lang)",
+                path.display()
+            ),
+            None => anyhow!("could not determine language for stdin (try --lang)"),
+        })?;
 
-    highlight::highlight(&loader, lang, &source, backend.as_mut())?;
+        highlight::highlight(&loader, lang, source, backend.as_mut())?;
+    }
     let rendered = backend.finish();
 
     write_output(cli.output.as_deref(), &rendered)
@@ -272,5 +289,75 @@ fn write_output(output: Option<&Path>, content: &str) -> Result<()> {
     } else {
         print!("{content}");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use clap::CommandFactory;
+    use clap::error::ErrorKind;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).unwrap()
+    }
+
+    /// `Cli` is not `Debug`, so `unwrap_err` is unavailable.
+    fn parse_err(args: &[&str]) -> clap::Error {
+        match Cli::try_parse_from(args) {
+            Ok(_) => panic!("expected a parse error for {args:?}"),
+            Err(e) => e,
+        }
+    }
+
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn version_flag() {
+        let expected = concat!("v", env!("CARGO_PKG_VERSION"));
+        for arg in ["--version", "-V"] {
+            let err = parse_err(&["dathan", arg]);
+            assert_eq!(err.kind(), ErrorKind::DisplayVersion);
+            assert!(err.to_string().contains(expected), "{arg}: {err}");
+        }
+        // `-v` stays free for a future --verbose.
+        assert_eq!(
+            parse_err(&["dathan", "-v"]).kind(),
+            ErrorKind::UnknownArgument
+        );
+    }
+
+    #[test]
+    fn repeated_options_take_the_last() {
+        let cli = parse(&["dathan", "--lang", "rust", "--lang", "python"]);
+        assert_eq!(cli.lang.as_deref(), Some("python"));
+
+        let cli = parse(&["dathan", "--format", "html", "--format", "terminal"]);
+        assert!(cli.format == Format::Terminal);
+
+        let cli = parse(&["dathan", "--inline", "--inline"]);
+        assert!(cli.inline);
+
+        let cli = parse(&["dathan", "-o", "a.html", "--output", "b.html"]);
+        assert_eq!(cli.output, Some(PathBuf::from("b.html")));
+    }
+
+    #[test]
+    fn repeated_runtime_accumulates() {
+        let cli = parse(&["dathan", "--runtime", "a", "--runtime", "b"]);
+        assert_eq!(cli.runtime, [PathBuf::from("a"), PathBuf::from("b")]);
+    }
+
+    #[test]
+    fn multiple_files() {
+        let cli = parse(&["dathan", "a.rs", "b.py"]);
+        assert_eq!(cli.file, [PathBuf::from("a.rs"), PathBuf::from("b.py")]);
+
+        // No files means stdin.
+        assert!(parse(&["dathan"]).file.is_empty());
     }
 }
