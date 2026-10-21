@@ -9,7 +9,25 @@ runtime provides. Grammar loading, query `inherits` resolution, injections, and
 locals are handled by [tree-house](https://github.com/helix-editor/tree-house),
 the same library Helix uses.
 
-## Build
+## Install
+
+```sh
+brew install waddie/brew/dathan
+```
+
+Or `brew tap waddie/brew` first, then install by name.
+
+`dathan` pulls in Homebrew’s helix for its runtime and wraps the binary to use
+it when `HELIX_RUNTIME` is unset. `~/.config/helix/runtime` still takes priority.
+
+If you already have a Helix runtime, `--without-helix` skips the dependency and
+builds from source:
+
+```sh
+brew install --without-helix waddie/brew/dathan
+```
+
+## Build from source
 
 ```sh
 cargo build --release
