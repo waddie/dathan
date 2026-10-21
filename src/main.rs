@@ -62,7 +62,7 @@ struct Cli {
     runtime: Vec<PathBuf>,
 
     /// Path to a languages.toml (defaults to the Helix source/user config).
-    #[arg(long)]
+    #[arg(long, env = "DATHAN_LANGUAGES")]
     languages: Option<PathBuf>,
 
     /// Theme to use: a path to a theme.toml, or a bare name (e.g. `acid`)
@@ -162,8 +162,8 @@ fn detect_language(
         })
 }
 
-/// Load the base `languages.toml` (`--languages`, else the `$HELIX_RUNTIME`-
-/// adjacent config, else the user config) and, unless the user config is itself
+/// Load the base `languages.toml` (`--languages` or `$DATHAN_LANGUAGES`, else
+/// the `$HELIX_RUNTIME`-adjacent config, else the user config) and, unless the user config is itself
 /// the base, merge it over the base by language name, mirroring how Helix layers
 /// user config on the default.
 fn load_languages(cli: &Cli) -> Result<toml::Value> {
@@ -299,12 +299,16 @@ mod tests {
     use clap::CommandFactory;
     use clap::error::ErrorKind;
 
+    // Parsing reads `$DATHAN_LANGUAGES`, so it takes the env lock like any
+    // other environment reader.
     fn parse(args: &[&str]) -> Cli {
+        let _env = crate::runtime::env_lock();
         Cli::try_parse_from(args).unwrap()
     }
 
     /// `Cli` is not `Debug`, so `unwrap_err` is unavailable.
     fn parse_err(args: &[&str]) -> clap::Error {
+        let _env = crate::runtime::env_lock();
         match Cli::try_parse_from(args) {
             Ok(_) => panic!("expected a parse error for {args:?}"),
             Err(e) => e,
@@ -328,6 +332,24 @@ mod tests {
         assert_eq!(
             parse_err(&["dathan", "-v"]).kind(),
             ErrorKind::UnknownArgument
+        );
+    }
+
+    #[test]
+    fn languages_env_is_the_fallback_for_the_flag() {
+        let _env = crate::runtime::env_lock();
+        let _guard = crate::runtime::EnvGuard::set("DATHAN_LANGUAGES", "/env/languages.toml");
+
+        let cli = Cli::try_parse_from(["dathan"]).unwrap();
+        assert_eq!(
+            cli.languages.as_deref(),
+            Some(Path::new("/env/languages.toml"))
+        );
+
+        let cli = Cli::try_parse_from(["dathan", "--languages", "/flag/languages.toml"]).unwrap();
+        assert_eq!(
+            cli.languages.as_deref(),
+            Some(Path::new("/flag/languages.toml"))
         );
     }
 

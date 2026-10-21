@@ -88,10 +88,45 @@ pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// Set an env var for the test, restoring the previous value on drop
+/// (including on panic) so other tests in the process are unaffected.
+///
+/// Callers must hold [`env_lock`] for at least as long as the guard.
+#[cfg(test)]
+pub(crate) struct EnvGuard {
+    key: &'static str,
+    prev: Option<std::ffi::OsString>,
+}
+
+#[cfg(test)]
+impl EnvGuard {
+    pub(crate) fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let prev = std::env::var_os(key);
+        // SAFETY: the caller holds `env_lock`, which every environment
+        // reader in the test suite also takes, so no other thread is in
+        // the environment while this writes.
+        unsafe { std::env::set_var(key, value) };
+        Self { key, prev }
+    }
+}
+
+#[cfg(test)]
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        // SAFETY: as in `set` - the guard is dropped before the `env_lock`
+        // guard that the test holds, so this still runs exclusively.
+        unsafe {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
     use std::fs;
 
     /// Create `<root>/grammars/<marker>.txt` so `find_file` has something to hit,
@@ -102,39 +137,6 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("test.txt"), marker).unwrap();
         root
-    }
-
-    /// Set an env var for the test, restoring the previous value on drop
-    /// (including on panic) so other tests in the process are unaffected.
-    ///
-    /// Callers must hold [`env_lock`] for at least as long as the guard.
-    struct EnvGuard {
-        key: &'static str,
-        prev: Option<OsString>,
-    }
-
-    impl EnvGuard {
-        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-            let prev = std::env::var_os(key);
-            // SAFETY: the caller holds `env_lock`, which every environment
-            // reader in the test suite also takes, so no other thread is in
-            // the environment while this writes.
-            unsafe { std::env::set_var(key, value) };
-            Self { key, prev }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            // SAFETY: as in `set` - the guard is dropped before the `env_lock`
-            // guard that the test holds, so this still runs exclusively.
-            unsafe {
-                match &self.prev {
-                    Some(v) => std::env::set_var(self.key, v),
-                    None => std::env::remove_var(self.key),
-                }
-            }
-        }
     }
 
     #[test]

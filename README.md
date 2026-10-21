@@ -47,6 +47,7 @@ Options:
 --lang <name>                Force a language instead of detecting it.
 --runtime <path>             Extra runtime root, highest priority. Repeatable.
 --languages <path>           Base languages.toml. The user config is still merged on top.
+                             Falls back to $DATHAN_LANGUAGES.
 --theme <path|name>          theme.toml path, or a bare name resolved against the runtime themes/ dirs.
 --emit-css                   Write a CSS stylesheet from the theme and exit. Ignores FILE.
 -o, --output <path>          Output file. Default: stdout.
@@ -112,11 +113,11 @@ Runtime roots are searched in this order, first match wins:
 2. `~/.config/helix/runtime`
 3. `$HELIX_RUNTIME`
 
-The base language registry is `--languages` if given, otherwise a
-`languages.toml` next to the `$HELIX_RUNTIME` tree (as in a Helix source
-checkout), otherwise `~/.config/helix/languages.toml`. When the base comes from
-`--languages` or `$HELIX_RUNTIME`, `~/.config/helix/languages.toml` is merged
-over it by language name.
+The base language registry is `--languages` if given, otherwise
+`$DATHAN_LANGUAGES`, otherwise a `languages.toml` next to the `$HELIX_RUNTIME`
+tree (as in a Helix source checkout), otherwise
+`~/.config/helix/languages.toml`. When the base comes from anywhere but the user
+config, `~/.config/helix/languages.toml` is merged over it by language name.
 
 Language detection uses `file-types` globs, then the file extension, then a
 `#!` shebang line. Override with `--lang`.

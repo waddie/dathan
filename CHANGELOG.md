@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.0 (2026-10-21)
+
+### Added
+
+- `DATHAN_LANGUAGES` env var, the fallback for `--languages`
+
 ## v0.9.0 (2026-08-07)
 
 ### Added
